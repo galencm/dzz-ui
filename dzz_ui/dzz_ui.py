@@ -42,6 +42,7 @@ class RegionPage(object):
     name = attr.ib()
     regions = attr.ib(default=attr.Factory(list))
     color = attr.ib(default=None)
+    rules_widget = attr.ib(default=None)
 
     @property
     def scripts(self):
@@ -475,8 +476,15 @@ class ClickableImage(Image):
                             crop_rect = (int(x1 / scale_x) , int(y1 / scale_y), int(w / scale_x), int(h / scale_y))
                             self.selection_mode_selections = []
                             self.script.script_input.text = ""
-                            scripts = self.app.default_region_page.scripts
-                            rule_scripts = self.app.rule_box.ruleset.script(keyling=True, newlines=False)
+                            if self.script.run_single_page_only:
+                                scripts = self.app.default_region_page.scripts
+                                rule_scripts =  self.app.default_region_page.rules_widget.ruleset.script(keyling=True, newlines=False)
+                            else:
+                                scripts = ""
+                                rule_scripts = ""
+                                for r in self.app.region_pages:
+                                    scripts += r.scripts + "\n"
+                                    rule_scripts += r.rules_widget.ruleset.script(keyling=True, newlines=False)
                             if self.script.auto_run_scripts is True:
                                 self.script.run(scripts)
                                 self.script.run(rule_scripts)
@@ -492,8 +500,15 @@ class ClickableImage(Image):
     def update_region_scripts(self):
         # used when a region is removed
         self.script.script_input.text = ""
-        scripts = self.app.default_region_page.scripts
-        rule_scripts = self.app.rule_box.ruleset.script(keyling=True, newlines=False)
+        scripts = ""
+        rule_scripts = ""
+        if self.script.run_single_page_only:
+            scripts = self.app.default_region_page.scripts
+            rule_scripts =  self.app.default_region_page.rules_widget.ruleset.script(keyling=True, newlines=False)
+        else:
+            for r in self.app.region_pages:
+                scripts += r.scripts + "\n"
+                rule_scripts += r.rules_widget.ruleset.script(keyling=True, newlines=False)
         self.script.script_input.text += scripts + "\n"
         self.script.script_input.text += rule_scripts
 
@@ -511,11 +526,12 @@ class ToggleButton(Button):
             self.background_color = [.9, .9, .9, 1]
         return super(ToggleButton, self).on_press()
 
-class RuleBox(BoxLayout):
+class RuleWidgets(BoxLayout):
     def __init__(self, app=None, **kwargs):
-        types_container = BoxLayout(orientation="vertical")
+        super(RuleWidgets, self).__init__(**kwargs)
         self.ruleset = RuleSet()
         self.app = app
+        types_container = BoxLayout(orientation="vertical")
         for rule_type in ("int", "str", "roman", "Range", "STRING"):
             row = BoxLayout(orientation="horizontal", size_hint_y=None, height=30)
             rule_toggle = ToggleButton(text=rule_type, size_hint_x=None)
@@ -525,6 +541,7 @@ class RuleBox(BoxLayout):
             rule_toggle.bind(on_press=lambda widget, setting_row=setting_row: self.toggle_row(widget, setting_row))
             destination_widget = TextInput(multiline=False)
             result_widget = TextInput(multiline=False)
+            # set widget values from region_page rules
             setting_row.add_widget(destination_widget)
             setting_row.add_widget(Label(text="becomes"))
             setting_row.add_widget(result_widget)
@@ -533,13 +550,11 @@ class RuleBox(BoxLayout):
                            values_widget = rule_toggle,
                            destination_widget = destination_widget,
                            result_widget = result_widget,
-                           enabled_widget=rule_toggle)
+                           enabled_widget = rule_toggle)
             self.ruleset.rules.append(r)
             types_container.add_widget(row)
             for child in setting_row.children:
                 child.opacity = .2
-
-        super(RuleBox, self).__init__(**kwargs)
         self.add_widget(types_container)
 
     def toggle_row(self, row_button, row):
@@ -550,15 +565,29 @@ class RuleBox(BoxLayout):
             for child in row.children:
                 child.opacity = 1
 
+class RuleBox(BoxLayout):
+    def __init__(self, app=None, **kwargs):
+        self.types_container = BoxLayout(orientation="vertical")
+        self.app = app
+        super(RuleBox, self).__init__(**kwargs)
+        self.add_widget(self.types_container)
+
+    def load_rules(self, rules_widget):
+        self.types_container.clear_widgets()
+        self.types_container.add_widget(rules_widget)
+
 class ScriptBox(BoxLayout):
     def __init__(self, source_widget, **kwargs):
         self.orientation = "vertical"
         self.script_input = TextInput(hint_text="()", multiline=True, size_hint_y=1)
         self.auto_run_scripts = True
+        self.run_single_page_only = False
         self.run_script_this_button = Button(text="run script on this", size_hint_y=None, height=30)
         self.run_script_this_button.bind(on_press=lambda widget: self.run_script(self.script_input.text, widget=self.script_input))
         self.run_script_all_button = Button(text="run script on all ( {} )".format(self.all_sources_key), size_hint_y=None, height=30)
         self.run_script_all_button.bind(on_press=lambda widget: self.run_on_all())
+        self.script_regenerate_button = Button(text="regenerate scripts", size_hint_y=None, height=30)
+        self.script_regenerate_button.bind(on_press=lambda widget: self.source_widget.update_region_scripts())
 
         self.source_widget = source_widget
         super(ScriptBox, self).__init__(**kwargs)
@@ -569,10 +598,18 @@ class ScriptBox(BoxLayout):
         auto_run_row = BoxLayout(orientation="horizontal", height=30, size_hint_y=None)
         auto_run_row.add_widget(auto_run_checkbox)
         auto_run_row.add_widget(Label(text="auto run generated scripts", size_hint_x=None))
+        run_single_page_only_checkbox = CheckBox(size_hint_x=None)
+        if self.run_single_page_only:
+            run_single_page_only_checkbox.active = BooleanProperty(True)
+        run_single_page_only_checkbox.bind(active=lambda widget, value, self=self: setattr(self, "run_single_page_only", value))
+        auto_run_row.add_widget(run_single_page_only_checkbox)
+        auto_run_row.add_widget(Label(text="run this page region only", size_hint_x=None))
+
         self.add_widget(auto_run_row)
         self.add_widget(self.script_input)
         self.add_widget(self.run_script_this_button)
         self.add_widget(self.run_script_all_button)
+        self.add_widget(self.script_regenerate_button)
 
     def run_on_all(self):
         sources = redis_conn.lrange(self.all_sources_key, 0, -1)
@@ -675,7 +712,7 @@ class DzzApp(App):
 
     def set_region_page(self, widget):
         if not widget.text in [region_page.name for region_page in self.region_pages]:
-            region = RegionPage(name=widget.text)
+            region = RegionPage(name=widget.text, rules_widget=RuleWidgets(app=self))
             self.region_pages.append(region)
             self.default_region_page = region
         else:
@@ -683,6 +720,7 @@ class DzzApp(App):
                 if region.name == widget.text:
                     self.default_region_page = region
         self.update_regions()
+        self.rule_box.load_rules(self.default_region_page.rules_widget)
 
     def update_regions(self):
         self.region_container.clear_widgets()
