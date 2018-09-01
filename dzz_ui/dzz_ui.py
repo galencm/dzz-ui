@@ -12,6 +12,7 @@ import redis
 from PIL import Image as PImage
 import attr
 import colour
+from lxml import etree
 
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
@@ -58,6 +59,16 @@ class RegionPage(object):
     def check(self, attribute, value):
         if value is None:
             setattr(self,'color', colour.Color(pick_for=self))
+
+    def as_xml(self):
+        regionpage = etree.Element("regionpage")
+        regionpage.set("color", self.color.hex_l)
+        regionpage.set("name", self.name)
+        for region in self.regions:
+            regionpage.append(region.as_xml())
+        for rule in self.rules_widget.as_xml():
+            regionpage.append(rule)
+        return regionpage
 
 @attr.s
 class Rule(object):
@@ -142,6 +153,22 @@ class Region(object):
     @property
     def coordinates_scaled(self):
         return [int(self.x / self.scaling_x), int(self.y / self.scaling_y), int(self.w / self.scaling_x), int(self.h / self.scaling_y)]
+
+    def as_xml(self):
+        region = etree.Element("region")
+        for k, v in attr.asdict(self).items():
+            region.set(k, str(v))
+        # store properties, not needed for recreating object
+        coordinates_scaled = etree.Element("coordinates")
+        coordinates_scaled.set("scaled", "True")
+        coordinates_unscaled = etree.Element("coordinates")
+        coordinates_unscaled.set("scaled", "False")
+        for coords, coords_element in zip([self.coordinates_unscaled, self.coordinates_scaled], [coordinates_unscaled, coordinates_scaled]):
+            for coord, coord_name in zip(coords, ["x", "y", "w", "h"]):
+                coords_element.set(coord_name, str(coord))
+        region.append(coordinates_unscaled)
+        region.append(coordinates_scaled)
+        return region
 
 class DropDownInput(TextInput):
     def __init__(self, preload=None, preload_attr=None, preload_clean=True, **kwargs):
@@ -471,8 +498,12 @@ class ClickableImage(Image):
                         scale_y = self.norm_image_size[1] / self.texture_size[1]
 
                         region = Region(name=region_name, x=x1, y=y1, w=w, h=h, scaling_x=scale_x, scaling_y=scale_y)
+                        print("region from clicks", region)
                         try:
                             self.app.default_region_page.regions.append(region)
+                            # a region has been added update xml
+                            # and write session to db
+                            self.app.session_to_db()
                             crop_rect = (int(x1 / scale_x) , int(y1 / scale_y), int(w / scale_x), int(h / scale_y))
                             self.selection_mode_selections = []
                             self.script.script_input.text = ""
@@ -526,6 +557,12 @@ class ToggleButton(Button):
             self.background_color = [.9, .9, .9, 1]
         return super(ToggleButton, self).on_press()
 
+    def draw_pressed_state(self):
+        if self.pressed:
+            self.background_color = [0, 1, 0, 1]
+        else:
+            self.background_color = [.9, .9, .9, 1]
+
 class RuleWidgets(BoxLayout):
     def __init__(self, app=None, **kwargs):
         super(RuleWidgets, self).__init__(**kwargs)
@@ -539,6 +576,8 @@ class RuleWidgets(BoxLayout):
             setting_row = BoxLayout(orientation="horizontal")
             row.add_widget(setting_row)
             rule_toggle.bind(on_press=lambda widget, setting_row=setting_row: self.toggle_row(widget, setting_row))
+            # store setting_row to allow updates from xml
+            rule_toggle.setting_row = setting_row
             destination_widget = TextInput(multiline=False)
             result_widget = TextInput(multiline=False)
             # set widget values from region_page rules
@@ -557,13 +596,31 @@ class RuleWidgets(BoxLayout):
                 child.opacity = .2
         self.add_widget(types_container)
 
-    def toggle_row(self, row_button, row):
-        if row_button.pressed:
+    def toggle_row(self, row_button, row, update_session=True):
+        if row_button.pressed is False:
             for child in row.children:
                 child.opacity = .2
-        else:
+        elif row_button.pressed is True:
             for child in row.children:
                 child.opacity = 1
+        # messy, since enabled state is used from the ToggleButton.pressed
+        # the on_press call does not change it before calls to session_to_db
+        # add a slight delay for now
+        if update_session:
+            Clock.schedule_once(lambda dt: self.app.session_to_db(), .1)
+
+
+    def as_xml(self):
+        rules = []
+        for rule in self.ruleset.rules:
+            rule_xml = etree.Element("rule")
+            for k, v in attr.asdict(rule.rule).items():
+                rule_xml.set(k, v)
+            # enabled is a ToggleButton widget in RuleWidget
+            # needed to recreate state
+            rule_xml.set("enabled", str(rule.enabled_widget.pressed))
+            rules.append(rule_xml)
+        return rules
 
 class RuleBox(BoxLayout):
     def __init__(self, app=None, **kwargs):
@@ -683,13 +740,20 @@ class DzzApp(App):
         self.kwargs = kwargs
         self.region_pages = []
         self.default_region_page = None
+        self.session_key_template = "dzz:session:{host}:{port}"
         if kwargs["db_host"] and kwargs["db_port"]:
             global binary_r
             global redis_conn
             db_settings = {"host" :  kwargs["db_host"], "port" : kwargs["db_port"]}
             binary_r = redis.StrictRedis(**db_settings)
             redis_conn = redis.StrictRedis(**db_settings, decode_responses=True)
+        self.db_port = redis_conn.connection_pool.connection_kwargs["port"]
+        self.db_host = redis_conn.connection_pool.connection_kwargs["host"]
         super(DzzApp, self).__init__()
+
+    @property
+    def session_key(self):
+        return self.session_key_template.format(host=self.db_host, port=self.db_port)
 
     def save_session(self):
         pass
@@ -709,6 +773,92 @@ class DzzApp(App):
 
         if msg in (self.img.key):
             self.fields.update_field_rows(self.img.key_value)
+
+        if msg in (self.session_key):
+            Clock.schedule_once(lambda dt, msg=msg: self.update_session(etree.fromstring(redis_conn.hget(msg, "xml"))), .1)
+
+    def update_session(self, xml):
+        print(etree.tostring(xml, pretty_print=True).decode())
+        for session in xml.xpath('//session'):
+            for regionpage_xml in session.xpath('//regionpage'):
+                # create/update regionpages
+                name = str(regionpage_xml.xpath("./@name")[0])
+                color = str(regionpage_xml.xpath("./@color")[0])
+                if not name in [region_page.name for region_page in self.region_pages]:
+                    regionpage = RegionPage(name=name, color=colour.Color(color), rules_widget=RuleWidgets(app=self))
+                    self.region_pages.append(regionpage)
+                    if self.default_region_page is None:
+                        self.default_region_page = regionpage
+                        self.region_page.text = regionpage.name
+                        # validate to enter in dropdown
+                        self.region_page.dispatch('on_text_validate')
+                        self.update_regions()
+                        self.rule_box.load_rules(self.default_region_page.rules_widget)
+                else:
+                    regionpage = [region_page for region_page in self.region_pages if region_page.name == name][0]
+
+                # create/update regions
+                # use to delete existing regions
+                created_regions = set()
+                for region_xml in regionpage_xml.xpath('//region'):
+                    r = {}
+                    # use a copy of region attributes
+                    r = dict(region_xml.attrib)
+
+                    # try to convert back ints and floats
+                    for k, v in r.items():
+                        try:
+                            r[k] = int(v)
+                        except Exception as ex:
+                            try:
+                                r[k] = float(v)
+                            except:
+                                pass
+                            pass
+
+                    r = Region(**r)
+                    print("region from xml: ",r)
+                    created_regions.add(r.name)
+                    if r.name in [region.name for region in regionpage.regions]:
+                        to_remove = [region for region in regionpage.regions if region.name == r.name][0]
+                        regionpage.regions.remove(to_remove)
+                        regionpage.regions.append(r)
+                    else:
+                        regionpage.regions.append(r)
+
+                for rule_xml in regionpage_xml.xpath('//rule'):
+                    # create/update rules
+                    rule = dict(rule_xml.attrib)
+                    for r in regionpage.rules_widget.ruleset.rules:
+                        # rule widgets already exist, they are created
+                        # by parent widget, match using values and then
+                        # update
+                        if r.values_widget.text == rule["values"]:
+                            r.destination_widget.text = rule["destination"]
+                            r.result_widget.text = rule["result"]
+                            if rule["enabled"].lower() == "true":
+                                enabled_state = True
+                            else:
+                                enabled_state = False
+                            r.enabled_widget.pressed = enabled_state
+                            # update to toggle enabled correctly...
+                            r.enabled_widget.draw_pressed_state()
+                            # set toggle_row state too
+                            regionpage.rules_widget.toggle_row(r.enabled_widget, r.enabled_widget.setting_row, update_session=False)
+
+                # remove regions if needed
+                existing_regions = set([region.name for region in regionpage.regions])
+                remove_regions = existing_regions - created_regions
+                print("removing ", remove_regions, existing_regions, created_regions)
+                for region in list(regionpage.regions):
+                    if region.name in remove_regions:
+                        regionpage.regions.remove(region)
+
+        self.update_regions()
+        # call draw_regions with a slight delay to
+        # make sure canvas is loaded, otherwise rectangles
+        # are drawn with incorrect coordinates
+        Clock.schedule_once(lambda dt, : self.img.draw_regions(), 0.5)
 
     def set_region_page(self, widget):
         if not widget.text in [region_page.name for region_page in self.region_pages]:
@@ -731,9 +881,19 @@ class DzzApp(App):
             change_region_name.bind(on_text_validate=lambda widget, region=region: setattr(region, "name", widget.text))
             row.add_widget(change_region_name)
             remove_region = Button(text="remove")
-            remove_region.bind(on_press=lambda widget, region=region, region_page=self.default_region_page: [region_page.regions.remove(region), self.update_regions(), self.img.draw_regions(), self.img.update_region_scripts()])
+            remove_region.bind(on_press=lambda widget, region=region, region_page=self.default_region_page: [region_page.regions.remove(region), self.update_regions(), self.img.draw_regions(), self.img.update_region_scripts(), self.session_to_db()])
             row.add_widget(remove_region)
             self.region_container.add_widget(row)
+
+    def as_xml(self):
+        session = etree.Element("session")
+        for rp in self.region_pages:
+            session.append(rp.as_xml())
+        return session
+
+    def session_to_db(self):
+        session_string = etree.tostring(self.as_xml(), pretty_print=True).decode()
+        redis_conn.hmset(self.session_key, {"xml" : session_string})
 
     def build(self):
         root = BoxLayout()
@@ -771,7 +931,11 @@ class DzzApp(App):
         self.db_event_subscription.psubscribe(**{'__keyspace@0__:*': self.handle_db_events})
         # add thread to pubsub object to stop() on exit
         self.db_event_subscription.thread = self.db_event_subscription.run_in_thread(sleep_time=0.001)
-
+        # try to get existing/latest session
+        try:
+            self.update_session(etree.fromstring(redis_conn.hget(self.session_key, "xml")))
+        except Exception as ex:
+            print(ex)
         return root
 
 def load_image(uuid, new_size=None):
