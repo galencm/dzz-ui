@@ -639,6 +639,7 @@ class ScriptBox(BoxLayout):
         self.script_input = TextInput(hint_text="()", multiline=True, size_hint_y=1)
         self.auto_run_scripts = True
         self.run_single_page_only = False
+        self.sync_with_others = True
         self.run_script_this_button = Button(text="run script on this", size_hint_y=None, height=30)
         self.run_script_this_button.bind(on_press=lambda widget: self.run_script(self.script_input.text, widget=self.script_input))
         self.run_script_all_button = Button(text="run script on all ( {} )".format(self.all_sources_key), size_hint_y=None, height=30)
@@ -661,6 +662,12 @@ class ScriptBox(BoxLayout):
         run_single_page_only_checkbox.bind(active=lambda widget, value, self=self: setattr(self, "run_single_page_only", value))
         auto_run_row.add_widget(run_single_page_only_checkbox)
         auto_run_row.add_widget(Label(text="run this page region only", size_hint_x=None))
+        sync_checkbox = CheckBox(size_hint_x=None)
+        if self.sync_with_others:
+            sync_checkbox.active = BooleanProperty(True)
+        sync_checkbox.bind(active=lambda widget, value, self=self: [setattr(self, "sync_with_others", value), self.app.use_latest_session()])
+        auto_run_row.add_widget(sync_checkbox)
+        auto_run_row.add_widget(Label(text="sync with others", size_hint_x=None))
 
         self.add_widget(auto_run_row)
         self.add_widget(self.script_input)
@@ -778,6 +785,10 @@ class DzzApp(App):
             Clock.schedule_once(lambda dt, msg=msg: self.update_session(etree.fromstring(redis_conn.hget(msg, "xml"))), .1)
 
     def update_session(self, xml):
+        if self.img.script.sync_with_others:
+            self.update_from_xml(xml)
+
+    def update_from_xml(self, xml):
         print(etree.tostring(xml, pretty_print=True).decode())
         for session in xml.xpath('//session'):
             for regionpage_xml in session.xpath('//regionpage'):
@@ -895,6 +906,12 @@ class DzzApp(App):
         session_string = etree.tostring(self.as_xml(), pretty_print=True).decode()
         redis_conn.hmset(self.session_key, {"xml" : session_string})
 
+    def use_latest_session(self):
+        try:
+            self.update_session(etree.fromstring(redis_conn.hget(self.session_key, "xml")))
+        except Exception as ex:
+            print(ex)
+
     def build(self):
         root = BoxLayout()
         self.img = ClickableImage()
@@ -932,10 +949,7 @@ class DzzApp(App):
         # add thread to pubsub object to stop() on exit
         self.db_event_subscription.thread = self.db_event_subscription.run_in_thread(sleep_time=0.001)
         # try to get existing/latest session
-        try:
-            self.update_session(etree.fromstring(redis_conn.hget(self.session_key, "xml")))
-        except Exception as ex:
-            print(ex)
+        self.use_latest_session()
         return root
 
 def load_image(uuid, new_size=None):
