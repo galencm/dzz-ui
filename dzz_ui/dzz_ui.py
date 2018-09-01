@@ -910,7 +910,8 @@ class DzzApp(App):
 
     def session_to_db(self):
         session_string = etree.tostring(self.as_xml(), pretty_print=True).decode()
-        redis_conn.hmset(self.session_key, {"xml" : session_string})
+        if self.img.script.sync_with_others:
+            redis_conn.hmset(self.session_key, {"xml" : session_string})
 
     def use_latest_session(self):
         try:
