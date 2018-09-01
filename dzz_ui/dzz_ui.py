@@ -424,7 +424,7 @@ class ClickableImage(Image):
         if self.norm_image_size[0] > self.norm_image_size[1]:
             offset_y = int((self.size[1] - self.norm_image_size[1]) / 2) + self.norm_image_size[1]
         else:
-            offset_y = self.norm_image_size[1]
+            offset_y = self.norm_image_size[1] + int((self.size[1] - self.norm_image_size[1]) / 2)
 
         region[0] = region[0] + offset_x
         region[1] = abs(region[1] - offset_y) - region[3]
@@ -456,22 +456,22 @@ class ClickableImage(Image):
     def on_touch_up(self, touch):
         if self.collide_point(*touch.pos):
             if touch.button == 'left':
-                print("A clik1!!")
+                # img_to_canvas_coords also uses an offset when drawing regions
                 offset_x = int((self.size[0] - self.norm_image_size[0]) / 2)
                 offset_y = 0
                 if self.norm_image_size[0] > self.norm_image_size[1]:
                     offset_y = int((self.size[1] - self.norm_image_size[1]) / 2) + self.norm_image_size[1]
                 else:
-                    offset_y = self.norm_image_size[1]
+                    offset_y = self.norm_image_size[1] + int((self.size[1] - self.norm_image_size[1]) / 2)
 
                 tx = int(round(touch.x))
                 ty = int(round(touch.y))
                 adjusted_ty = int(ty - offset_y)
                 adjusted_tx = int(tx - offset_x)
-                if adjusted_ty <= 0:
+
+                if adjusted_ty:
                     adjusted_ty = abs(adjusted_ty)
                     if 0 < adjusted_ty < self.norm_image_size[1] and 0 < adjusted_tx < self.norm_image_size[0]:
-                        # print("image coords x {} y {}".format(adjusted_tx, adjusted_ty))
                         self.selection_mode_selections.extend([adjusted_tx, adjusted_ty])
                         # draw a circle where click occured
                         with self.canvas:
