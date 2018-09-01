@@ -25,7 +25,7 @@ from kivy.uix.checkbox import CheckBox
 from kivy.uix.dropdown import DropDown
 from kivy.animation import Animation
 from kivy.graphics import Color, Line, Ellipse, InstructionGroup
-from kivy.graphics.vertex_instructions import Rectangle
+from kivy.graphics.vertex_instructions import Rectangle, Ellipse
 from kivy.uix.label import Label
 from kivy.properties import BooleanProperty
 
@@ -454,79 +454,85 @@ class ClickableImage(Image):
         return name
 
     def on_touch_up(self, touch):
-        #print(touch.opos, touch.pos)
-        #if touch.grab_current is self:
-        if touch.button == 'left':
-            offset_x = int((self.size[0] - self.norm_image_size[0]) / 2)
-            offset_y = 0
-            if self.norm_image_size[0] > self.norm_image_size[1]:
-                offset_y = int((self.size[1] - self.norm_image_size[1]) / 2) + self.norm_image_size[1]
-            else:
-                offset_y = self.norm_image_size[1]
+        if self.collide_point(*touch.pos):
+            if touch.button == 'left':
+                print("A clik1!!")
+                offset_x = int((self.size[0] - self.norm_image_size[0]) / 2)
+                offset_y = 0
+                if self.norm_image_size[0] > self.norm_image_size[1]:
+                    offset_y = int((self.size[1] - self.norm_image_size[1]) / 2) + self.norm_image_size[1]
+                else:
+                    offset_y = self.norm_image_size[1]
 
-            tx = int(round(touch.x))
-            ty = int(round(touch.y))
-            adjusted_ty = int(ty - offset_y)
-            adjusted_tx = int(tx - offset_x)
-            if adjusted_ty <= 0:
-                adjusted_ty = abs(adjusted_ty)
-                if 0 < adjusted_ty < self.norm_image_size[1] and 0 < adjusted_tx < self.norm_image_size[0]:
-                    # print("image coords x {} y {}".format(adjusted_tx, adjusted_ty))
-                    self.selection_mode_selections.extend([adjusted_tx, adjusted_ty])
-                    if len(self.selection_mode_selections) >= 4:
-                        rect = self.selection_mode_selections[:4]
-                        x1 = 0
-                        y1 = 0
-                        if rect[0] > rect[2]:
-                            w = rect[0] - rect[2]
-                            x1 = rect[0] - w
-                        else:
-                            w = rect[2] - rect[0]
-                            x1 = rect[2] - w
+                tx = int(round(touch.x))
+                ty = int(round(touch.y))
+                adjusted_ty = int(ty - offset_y)
+                adjusted_tx = int(tx - offset_x)
+                if adjusted_ty <= 0:
+                    adjusted_ty = abs(adjusted_ty)
+                    if 0 < adjusted_ty < self.norm_image_size[1] and 0 < adjusted_tx < self.norm_image_size[0]:
+                        # print("image coords x {} y {}".format(adjusted_tx, adjusted_ty))
+                        self.selection_mode_selections.extend([adjusted_tx, adjusted_ty])
+                        # draw a circle where click occured
+                        with self.canvas:
+                            Ellipse(pos=(tx, ty), size=(10, 10), group="region_clicks")
 
-                        if rect[1] > rect[3]:
-                            h = rect[1] - rect[3]
-                            y1 = rect[1] - h
-                        else:
-                            h = rect[3] - rect[1]
-                            y1 = rect[3] - h
-                        
-                        region_name = self.region_naming(x1, y1, self.norm_image_size[0], self.norm_image_size[1])
-
-                        # get scale
-                        scale_x = self.norm_image_size[0] / self.texture_size[0]
-                        scale_y = self.norm_image_size[1] / self.texture_size[1]
-
-                        region = Region(name=region_name, x=x1, y=y1, w=w, h=h, scaling_x=scale_x, scaling_y=scale_y)
-                        print("region from clicks", region)
-                        try:
-                            self.app.default_region_page.regions.append(region)
-                            # a region has been added update xml
-                            # and write session to db
-                            self.app.session_to_db()
-                            crop_rect = (int(x1 / scale_x) , int(y1 / scale_y), int(w / scale_x), int(h / scale_y))
+                        if len(self.selection_mode_selections) >= 4:
+                            rect = self.selection_mode_selections[:4]
                             self.selection_mode_selections = []
-                            self.script.script_input.text = ""
-                            if self.script.run_single_page_only:
-                                scripts = self.app.default_region_page.scripts
-                                rule_scripts =  self.app.default_region_page.rules_widget.ruleset.script(keyling=True, newlines=False)
+                            self.canvas.remove_group("region_clicks")
+                            x1 = 0
+                            y1 = 0
+                            if rect[0] > rect[2]:
+                                w = rect[0] - rect[2]
+                                x1 = rect[0] - w
                             else:
-                                scripts = ""
-                                rule_scripts = ""
-                                for r in self.app.region_pages:
-                                    scripts += r.scripts + "\n"
-                                    rule_scripts += r.rules_widget.ruleset.script(keyling=True, newlines=False)
-                            if self.script.auto_run_scripts is True:
-                                self.script.run(scripts)
-                                self.script.run(rule_scripts)
-                            self.script.script_input.text += scripts + "\n"
-                            self.script.script_input.text += rule_scripts
-                            self.draw_regions()
-                            self.app.update_regions()
-                        except Exception as ex:
-                            print(ex)
-                            anim = Animation(background_color=[1,0,0,1], duration=0.5) + Animation(background_color=[1,1,1,1], duration=0.5)
-                            anim.start((self.app.region_page))
+                                w = rect[2] - rect[0]
+                                x1 = rect[2] - w
+
+                            if rect[1] > rect[3]:
+                                h = rect[1] - rect[3]
+                                y1 = rect[1] - h
+                            else:
+                                h = rect[3] - rect[1]
+                                y1 = rect[3] - h
+
+                            region_name = self.region_naming(x1, y1, self.norm_image_size[0], self.norm_image_size[1])
+
+                            # get scale
+                            scale_x = self.norm_image_size[0] / self.texture_size[0]
+                            scale_y = self.norm_image_size[1] / self.texture_size[1]
+
+                            region = Region(name=region_name, x=x1, y=y1, w=w, h=h, scaling_x=scale_x, scaling_y=scale_y)
+                            print("region from clicks", region)
+                            try:
+                                self.app.default_region_page.regions.append(region)
+                                # a region has been added update xml
+                                # and write session to db
+                                self.app.session_to_db()
+                                crop_rect = (int(x1 / scale_x) , int(y1 / scale_y), int(w / scale_x), int(h / scale_y))
+                                self.selection_mode_selections = []
+                                self.script.script_input.text = ""
+                                if self.script.run_single_page_only:
+                                    scripts = self.app.default_region_page.scripts
+                                    rule_scripts =  self.app.default_region_page.rules_widget.ruleset.script(keyling=True, newlines=False)
+                                else:
+                                    scripts = ""
+                                    rule_scripts = ""
+                                    for r in self.app.region_pages:
+                                        scripts += r.scripts + "\n"
+                                        rule_scripts += r.rules_widget.ruleset.script(keyling=True, newlines=False)
+                                if self.script.auto_run_scripts is True:
+                                    self.script.run(scripts)
+                                    self.script.run(rule_scripts)
+                                self.script.script_input.text += scripts + "\n"
+                                self.script.script_input.text += rule_scripts
+                                self.draw_regions()
+                                self.app.update_regions()
+                            except Exception as ex:
+                                print(ex)
+                                anim = Animation(background_color=[1,0,0,1], duration=0.5) + Animation(background_color=[1,1,1,1], duration=0.5)
+                                anim.start((self.app.region_page))
 
     def update_region_scripts(self):
         # used when a region is removed
