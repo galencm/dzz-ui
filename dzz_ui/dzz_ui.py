@@ -744,7 +744,7 @@ class DzzApp(App):
         script_box = ScriptBox(source_widget=self.img, size_hint_y=.5)
         #set app for access to rule_box
         script_box.app = self
-        region_page = DropDownInput(height=60, size_hint_y=None, font_size="30sp")
+        region_page = DropDownInput(hint_text="enter a regionpage name", height=60, size_hint_y=None, font_size="30sp")
         region_page.bind(on_text_validate=lambda widget: self.set_region_page(widget))
         self.region_page = region_page
         self.region_container = BoxLayout(orientation="vertical", size_hint_y=None)
