@@ -797,13 +797,17 @@ class DzzApp(App):
     def update_from_xml(self, xml):
         print(etree.tostring(xml, pretty_print=True).decode())
         for session in xml.xpath('//session'):
-            for regionpage_xml in session.xpath('//regionpage'):
+            for regionpage_xml in session.xpath('./regionpage'):
                 # create/update regionpages
                 name = str(regionpage_xml.xpath("./@name")[0])
                 color = str(regionpage_xml.xpath("./@color")[0])
                 if not name in [region_page.name for region_page in self.region_pages]:
                     regionpage = RegionPage(name=name, color=colour.Color(color), rules_widget=RuleWidgets(app=self))
                     self.region_pages.append(regionpage)
+                    # insert name into dropdown
+                    self.region_page.text = regionpage.name
+                    self.region_page.dispatch('on_text_validate')
+
                     if self.default_region_page is None:
                         self.default_region_page = regionpage
                         self.region_page.text = regionpage.name
@@ -811,13 +815,16 @@ class DzzApp(App):
                         self.region_page.dispatch('on_text_validate')
                         self.update_regions()
                         self.rule_box.load_rules(self.default_region_page.rules_widget)
+                    else:
+                        # set dropdown name back to default
+                        self.region_page.text = self.default_region_page.name
                 else:
                     regionpage = [region_page for region_page in self.region_pages if region_page.name == name][0]
 
                 # create/update regions
                 # use to delete existing regions
                 created_regions = set()
-                for region_xml in regionpage_xml.xpath('//region'):
+                for region_xml in regionpage_xml.xpath('./region'):
                     r = {}
                     # use a copy of region attributes
                     r = dict(region_xml.attrib)
