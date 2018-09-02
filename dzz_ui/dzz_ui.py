@@ -729,9 +729,9 @@ class ScriptBox(BoxLayout):
 
             if model:
                 if source is None:
-                    source_modified = keyling.parse_lines(model, self.source_widget.key_value, self.source_widget.key_value["META_DB_KEY"], allow_shell_calls=True, env_vars=self.env_vars(self.source_widget.key_value["META_DB_KEY"]))
+                    source_modified = keyling.parse_lines(model, self.source_widget.key_value, self.source_widget.key_value["META_DB_KEY"], allow_shell_calls=True, env_vars=self.env_vars(self.source_widget.key_value["META_DB_KEY"]), source_updates=self.latest_source)
                 else:
-                    source_modified = keyling.parse_lines(model, source, source["META_DB_KEY"], allow_shell_calls=True, env_vars=self.env_vars(source["META_DB_KEY"]))
+                    source_modified = keyling.parse_lines(model, source, source["META_DB_KEY"], allow_shell_calls=True, env_vars=self.env_vars(source["META_DB_KEY"]), source_updates=self.latest_source)
                 # self.view_source = source_modified
 
             widget.background_color = [1, 1, 1, 1]
@@ -744,7 +744,10 @@ class ScriptBox(BoxLayout):
             print(ex)
             pass
         if model:
-            source_modified = keyling.parse_lines(model, self.source_widget.key_value, self.source_widget.key_value["META_DB_KEY"], allow_shell_calls=True, env_vars=self.env_vars(self.source_widget.key_value["META_DB_KEY"]))
+            source_modified = keyling.parse_lines(model, self.source_widget.key_value, self.source_widget.key_value["META_DB_KEY"], allow_shell_calls=True, env_vars=self.env_vars(self.source_widget.key_value["META_DB_KEY"]), source_updates=self.latest_source)
+
+    def latest_source(self):
+        return redis_conn.hgetall(self.source_widget.key_value["META_DB_KEY"])
 
 class DzzApp(App):
 
