@@ -1,0 +1,8 @@
+[title-max-length]
+line-length=50
+
+[body-max-line-length]
+line-length=60
+
+[body-min-length]
+min-length=9

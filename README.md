@@ -18,6 +18,14 @@ cd dzz-ui/
 pip3 install --editable ./ --user --process-dependency-links
 ```
 
+Setup linting and formatting git commit hooks:
+
+```
+cd dzz-ui/
+pre-commit install
+pre-commit install -t commit-msg
+```
+
 ## Usage
 
 ```
