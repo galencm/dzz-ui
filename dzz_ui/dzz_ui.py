@@ -8,8 +8,6 @@ import argparse
 import atexit
 import io
 import textwrap
-import operator
-import uuid
 import redis
 from PIL import Image as PImage
 import attr
@@ -27,8 +25,7 @@ from kivy.uix.checkbox import CheckBox
 from kivy.uix.dropdown import DropDown
 from kivy.animation import Animation
 from kivy.graphics import Color, Line, Ellipse, InstructionGroup
-from kivy.graphics.vertex_instructions import Rectangle as VectorRectangle
-from kivy.graphics.vertex_instructions import Ellipse as VectorEllipse
+from kivy.graphics.vertex_instructions import Rectangle, Ellipse
 from kivy.uix.label import Label
 from kivy.properties import BooleanProperty
 
@@ -53,19 +50,15 @@ class RegionPage(object):
         scripts = "("
         for region in self.regions:
             # suffixes _key and _ocr
-            scripts += textwrap.dedent(
-                """$$(<"keli img-crop-to-key [*] $KEY --x1 {} --y1 {} --width {} --height {} --to-key {region}_key --db-port $DB_PORT --db-host $DB_HOST">),
-                      $$(<"keli img-ocr-fan-in [*] {region}_key --to-key {region}_ocr --db-port $DB_PORT --db-host $DB_HOST">),""".format(
-                    *region.coordinates_scaled, region=self.name
-                )
-            )
+            scripts += textwrap.dedent('''$$(<"keli img-crop-to-key [*] $KEY --x1 {} --y1 {} --width {} --height {} --to-key {region}_key --db-port $DB_PORT --db-host $DB_HOST">),
+                      $$(<"keli img-ocr-fan-in [*] {region}_key --to-key {region}_ocr --db-port $DB_PORT --db-host $DB_HOST">),'''.format(*region.coordinates_scaled, region=self.name))
         scripts += ")"
         return scripts
 
     @color.validator
     def check(self, attribute, value):
         if value is None:
-            setattr(self, "color", colour.Color(pick_for=self))
+            setattr(self,'color', colour.Color(pick_for=self))
 
     def as_xml(self):
         regionpage = etree.Element("regionpage")
@@ -76,7 +69,6 @@ class RegionPage(object):
         for rule in self.rules_widget.as_xml():
             regionpage.append(rule)
         return regionpage
-
 
 @attr.s
 class Rule(object):
@@ -98,21 +90,18 @@ class RuleWidget(object):
 
     @property
     def enabled(self):
-        if self.enabled_widget.pressed:
+        if  self.enabled_widget.pressed:
             return True
         else:
             return False
 
     @property
     def rule(self):
-        return Rule(
-            source=self.source_widget.text,
-            symbol=self.symbol_widget.text,
-            values=self.values_widget.text,
-            destination=self.destination_widget.text,
-            result=self.result_widget.text,
-        )
-
+        return Rule(source=self.source_widget.text,
+                    symbol=self.symbol_widget.text,
+                    values=self.values_widget.text,
+                    destination=self.destination_widget.text,
+                    result=self.result_widget.text)
 
 @attr.s
 class RuleSet(object):
@@ -126,21 +115,16 @@ class RuleSet(object):
         for rule in self.rules:
             if rule.enabled:
                 # suffix _ocr
-                scripts += "{source}_ocr {symbol} {values} -> {destination} {result}".format(
-                    **attr.asdict(rule.rule)
-                )
+                scripts += '{source}_ocr {symbol} {values} -> {destination} {result}'.format(**attr.asdict(rule.rule))
                 if newlines:
                     scripts += "\n"
         scripts += "}"
 
         if keyling is True:
-            scripts = """($$(<"keli src-ruling-str [*] --db-port $DB_PORT --db-host $DB_HOST  --ruling-string '{}'">),)""".format(
-                scripts
-            )
+            scripts = '''($$(<"keli src-ruling-str [*] --db-port $DB_PORT --db-host $DB_HOST  --ruling-string '{}'">),)'''.format(scripts)
 
         print(scripts)
         return scripts
-
 
 @attr.s
 class Region(object):
@@ -168,12 +152,7 @@ class Region(object):
 
     @property
     def coordinates_scaled(self):
-        return [
-            int(self.x / self.scaling_x),
-            int(self.y / self.scaling_y),
-            int(self.w / self.scaling_x),
-            int(self.h / self.scaling_y),
-        ]
+        return [int(self.x / self.scaling_x), int(self.y / self.scaling_y), int(self.w / self.scaling_x), int(self.h / self.scaling_y)]
 
     def as_xml(self):
         region = etree.Element("region")
@@ -184,16 +163,12 @@ class Region(object):
         coordinates_scaled.set("scaled", "True")
         coordinates_unscaled = etree.Element("coordinates")
         coordinates_unscaled.set("scaled", "False")
-        for coords, coords_element in zip(
-            [self.coordinates_unscaled, self.coordinates_scaled],
-            [coordinates_unscaled, coordinates_scaled],
-        ):
+        for coords, coords_element in zip([self.coordinates_unscaled, self.coordinates_scaled], [coordinates_unscaled, coordinates_scaled]):
             for coord, coord_name in zip(coords, ["x", "y", "w", "h"]):
                 coords_element.set(coord_name, str(coord))
         region.append(coordinates_unscaled)
         region.append(coordinates_scaled)
         return region
-
 
 class DropDownInput(TextInput):
     def __init__(self, preload=None, preload_attr=None, preload_clean=True, **kwargs):
@@ -208,30 +183,22 @@ class DropDownInput(TextInput):
         super(DropDownInput, self).__init__(**kwargs)
         self.add_widget(self.drop_down)
 
-    def add_text(self, *args):
-        if args[0].text not in [
-            btn.text
-            for btn in self.drop_down.children[0].children
-            if hasattr(btn, "text")
-        ]:
+    def add_text(self,*args):
+        if args[0].text not in [btn.text for btn in self.drop_down.children[0].children if hasattr(btn ,'text')]:
             btn = Button(text=args[0].text, size_hint_y=None, height=44)
             self.drop_down.add_widget(btn)
             btn.bind(on_release=lambda btn: self.drop_down.select(btn.text))
-            if "preload" not in args:
+            if not 'preload' in args:
                 self.not_preloaded.add(btn)
 
     def on_select(self, *args):
         self.text = args[1]
-        if args[1] not in [
-            btn.text
-            for btn in self.drop_down.children[0].children
-            if hasattr(btn, "text")
-        ]:
+        if args[1] not in [btn.text for btn in self.drop_down.children[0].children if hasattr(btn ,'text')]:
             self.drop_down.append(Button(text=args[1]))
-            # self.not_preloaded.add(btn)
+            self.not_preloaded.add(btn)
         # call on_text_validate after selection
         # to avoid having to select textinput and press enter
-        self.dispatch("on_text_validate")
+        self.dispatch('on_text_validate')
 
     def on_touch_down(self, touch):
         preloaded = set()
@@ -242,21 +209,16 @@ class DropDownInput(TextInput):
                     thing_string = str(operator.attrgetter(self.preload_attr)(thing))
                 else:
                     thing_string = str(thing)
-                self.add_text(Button(text=thing_string), "preload")
+                self.add_text(Button(text=thing_string),'preload')
                 preloaded.add(thing_string)
 
         # preload_clean removes entries that
         # are not in the preload source anymore
         if self.preload_clean is True:
-            added_through_widget = [
-                btn.text for btn in self.not_preloaded if hasattr(btn, "text")
-            ]
+            added_through_widget = [btn.text for btn in self.not_preloaded if hasattr(btn ,'text')]
             for btn in self.drop_down.children[0].children:
                 try:
-                    if (
-                        btn.text not in preloaded
-                        and btn.text not in added_through_widget
-                    ):
+                    if btn.text not in preloaded and btn.text not in added_through_widget:
                         self.drop_down.remove_widget(btn)
                 except Exception as ex:
                     pass
@@ -268,11 +230,8 @@ class DropDownInput(TextInput):
             self.drop_down.open(self)
         return super(DropDownInput, self).on_touch_up(touch)
 
-
 class EditViewViewer(BoxLayout):
-    def __init__(
-        self, view_source=None, config_hash=None, source_source=None, **kwargs
-    ):
+    def __init__(self, view_source=None, config_hash=None, source_source=None, **kwargs):
         self.orientation = "vertical"
         # how to handle view_source update?
         # so that correct fields are displayed
@@ -280,17 +239,11 @@ class EditViewViewer(BoxLayout):
         self.config_hash = config_hash
         self.view_source = view_source
         self.source_source = source_source
-        self.buttons_container = BoxLayout(
-            orientation="vertical", height=80, size_hint_y=None
-        )
+        self.buttons_container = BoxLayout(orientation="vertical", height=80, size_hint_y=None)
         self.write_fields_button = Button(text="write fields")
         self.write_fields_button.bind(on_press=self.write_fields)
         self.add_field_input = TextInput(hint_text="add field", multiline=False)
-        self.add_field_input.bind(
-            on_text_validate=lambda widget: self.create_field(
-                widget.text, widget=widget
-            )
-        )
+        self.add_field_input.bind(on_text_validate=lambda widget: self.create_field(widget.text, widget=widget))
         self.field_widgets = []
         self.delete_source_button = Button(text="remove entire")
         self.delete_source_button.bind(on_press=lambda widget: self.delete_source())
@@ -300,10 +253,10 @@ class EditViewViewer(BoxLayout):
         # it is added when source is retrieved and popped
         # before writing source
         self.fields_container = BoxLayout(orientation="vertical")
-        if "META_DB_KEY" not in view_source:
-            view_source.update({"META_DB_KEY": str(uuid.uuid4())})
-        if "META_DB_TTL" not in view_source:
-            view_source.update({"META_DB_TTL": str(-1)})
+        if not "META_DB_KEY" in view_source:
+            view_source.update({"META_DB_KEY" : str(uuid.uuid4())})
+        if not "META_DB_TTL" in view_source:
+            view_source.update({"META_DB_TTL" : str(-1)})
         self.update_field_rows()
         self.add_widget(self.fields_container)
         self.buttons_container.add_widget(self.write_fields_button)
@@ -319,8 +272,8 @@ class EditViewViewer(BoxLayout):
             pass
 
     def create_field(self, field, widget=None):
-        if field not in self.view_source:
-            self.view_source.update({field: ""})
+        if not field in self.view_source:
+            self.view_source.update({field : ""})
             self.update_field_rows()
             if widget:
                 widget.text = ""
@@ -343,29 +296,13 @@ class EditViewViewer(BoxLayout):
             a = Label(text=str(field))
             row.add_widget(a)
             # dropdown?
-            field_input = TextInput(
-                text=str(value),
-                multiline=False,
-                height=a.height,
-                font_size=a.font_size / 1.5,
-            )
+            field_input = TextInput(text=str(value), multiline=False, height=a.height, font_size=a.font_size/1.5)
             field_input.field_for = str(field)
-            field_input.bind(
-                on_text_validate=lambda widget, field=field, value=value: self.update_field(
-                    field, widget.text, widget=widget
-                )
-            )
+            field_input.bind(on_text_validate=lambda widget, field=field, value=value: self.update_field(field, widget.text, widget=widget))
             field_highlight_button = Button(text="$", size_hint_x=.1)
-            field_highlight_button.bind(
-                on_press=lambda widget, field=field: [
-                    self.source_source.set_env_var("$SELECTED_KEY", field),
-                    self.highlight_field(),
-                ]
-            )
+            field_highlight_button.bind(on_press=lambda widget, field=field: [self.source_source.set_env_var("$SELECTED_KEY", field), self.highlight_field()])
             field_remove_button = Button(text="X", size_hint_x=.1)
-            field_remove_button.bind(
-                on_press=lambda widget, field=field: self.remove_field(field)
-            )
+            field_remove_button.bind(on_press=lambda widget, field=field: self.remove_field(field))
             row.add_widget(field_input)
             row.highlight = field_highlight_button
             row.field = field
@@ -382,15 +319,13 @@ class EditViewViewer(BoxLayout):
                     widget.highlight.background_color = [0, 1, 0, 1]
                 else:
                     widget.highlight.background_color = [1, 1, 1, 1]
-            except Exception as ex:
+            except:
                 pass
 
     def update_field(self, field, value, widget=None):
         if widget:
             current_background = widget.background_color
-            anim = Animation(background_color=[0, 1, 0, 1], duration=0.5) + Animation(
-                background_color=current_background, duration=0.5
-            )
+            anim = Animation(background_color=[0,1,0,1], duration=0.5) + Animation(background_color=current_background, duration=0.5)
             anim.start(widget)
         self.view_source[field] = value
 
@@ -401,7 +336,7 @@ class EditViewViewer(BoxLayout):
         # for now, still require enter to be pressed for META_
         # prefixed fields since it may disrupt values such as ttl
         for w in self.field_widgets:
-            if "META_" not in w.field_for:
+            if not "META_" in w.field_for:
                 self.update_field(w.field_for, w.text, w)
 
         key_to_write = self.view_source.pop("META_DB_KEY")
@@ -409,7 +344,7 @@ class EditViewViewer(BoxLayout):
         try:
             key_expiration = self.view_source.pop("META_DB_TTL")
             key_expiration = int(key_expiration)
-        except Exception as ex:
+        except:
             pass
 
         # remove any 'META_' prefixed keys before writing to db
@@ -419,15 +354,12 @@ class EditViewViewer(BoxLayout):
         redis_conn.hmset(key_to_write, self.view_source)
 
         # if a field has been deleted in ui, delete it from hash
-        for key in set(redis_conn.hgetall(key_to_write).keys()) - set(
-            self.view_source.keys()
-        ):
+        for key in set(redis_conn.hgetall(key_to_write).keys()) -set(self.view_source.keys()):
             print("removing {}".format(key))
             redis_conn.hdel(key_to_write, key)
 
         if key_expiration and key_expiration > 0:
             redis_conn.expire(key_to_write, key_expiration)
-
 
 class ClickableImage(Image):
     def __init__(self, **kwargs):
@@ -460,7 +392,7 @@ class ClickableImage(Image):
     @property
     def key_value(self):
         k = redis_conn.hgetall(self.key)
-        k.update({"META_DB_KEY": self.key})
+        k.update({"META_DB_KEY" : self.key})
         return k
 
     # def on_touch_down(self, touch):
@@ -481,23 +413,18 @@ class ClickableImage(Image):
         if color is None:
             color = [128, 128, 128, 0.5]
         if region_name is None:
-            region_name = ""
+            region_name=""
         with self.canvas:
             Color(*color)
-            VectorRectangle(pos=(x, y), size=(w, h), group=region_name)
+            Rectangle(pos=(x, y), size=(w, h), group=region_name)
 
     def img_to_canvas_coords(self, region):
         offset_x = int((self.size[0] - self.norm_image_size[0]) / 2)
         offset_y = 0
         if self.norm_image_size[0] > self.norm_image_size[1]:
-            offset_y = (
-                int((self.size[1] - self.norm_image_size[1]) / 2)
-                + self.norm_image_size[1]
-            )
+            offset_y = int((self.size[1] - self.norm_image_size[1]) / 2) + self.norm_image_size[1]
         else:
-            offset_y = self.norm_image_size[1] + int(
-                (self.size[1] - self.norm_image_size[1]) / 2
-            )
+            offset_y = self.norm_image_size[1] + int((self.size[1] - self.norm_image_size[1]) / 2)
 
         region[0] = region[0] + offset_x
         region[1] = abs(region[1] - offset_y) - region[3]
@@ -511,36 +438,31 @@ class ClickableImage(Image):
         if y_pos <= row_width:
             name += "top"
         elif row_width < y_pos <= row_width * 2:
-            name += "middle"
+             name += "middle"
         elif row_width * 2 < y_pos <= row_width * 3:
-            name += "bottom"
+             name += "bottom"
 
         name += " "
 
         if x_pos <= col_width:
             name += "left"
         elif col_width < x_pos <= col_width * 2:
-            name += "center"
+             name += "center"
         elif col_width * 2 < x_pos <= col_width * 3:
-            name += "right"
+             name += "right"
 
         return name
 
     def on_touch_up(self, touch):
         if self.collide_point(*touch.pos):
-            if touch.button == "left":
+            if touch.button == 'left':
                 # img_to_canvas_coords also uses an offset when drawing regions
                 offset_x = int((self.size[0] - self.norm_image_size[0]) / 2)
                 offset_y = 0
                 if self.norm_image_size[0] > self.norm_image_size[1]:
-                    offset_y = (
-                        int((self.size[1] - self.norm_image_size[1]) / 2)
-                        + self.norm_image_size[1]
-                    )
+                    offset_y = int((self.size[1] - self.norm_image_size[1]) / 2) + self.norm_image_size[1]
                 else:
-                    offset_y = self.norm_image_size[1] + int(
-                        (self.size[1] - self.norm_image_size[1]) / 2
-                    )
+                    offset_y = self.norm_image_size[1] + int((self.size[1] - self.norm_image_size[1]) / 2)
 
                 tx = int(round(touch.x))
                 ty = int(round(touch.y))
@@ -549,13 +471,8 @@ class ClickableImage(Image):
 
                 if adjusted_ty:
                     adjusted_ty = abs(adjusted_ty)
-                    if (
-                        0 < adjusted_ty < self.norm_image_size[1]
-                        and 0 < adjusted_tx < self.norm_image_size[0]
-                    ):
-                        self.selection_mode_selections.extend(
-                            [adjusted_tx, adjusted_ty]
-                        )
+                    if 0 < adjusted_ty < self.norm_image_size[1] and 0 < adjusted_tx < self.norm_image_size[0]:
+                        self.selection_mode_selections.extend([adjusted_tx, adjusted_ty])
                         # draw a circle where click occured
                         with self.canvas:
                             Ellipse(pos=(tx, ty), size=(10, 10), group="region_clicks")
@@ -580,50 +497,31 @@ class ClickableImage(Image):
                                 h = rect[3] - rect[1]
                                 y1 = rect[3] - h
 
-                            region_name = self.region_naming(
-                                x1, y1, self.norm_image_size[0], self.norm_image_size[1]
-                            )
+                            region_name = self.region_naming(x1, y1, self.norm_image_size[0], self.norm_image_size[1])
 
                             # get scale
                             scale_x = self.norm_image_size[0] / self.texture_size[0]
                             scale_y = self.norm_image_size[1] / self.texture_size[1]
 
-                            region = Region(
-                                name=region_name,
-                                x=x1,
-                                y=y1,
-                                w=w,
-                                h=h,
-                                scaling_x=scale_x,
-                                scaling_y=scale_y,
-                            )
+                            region = Region(name=region_name, x=x1, y=y1, w=w, h=h, scaling_x=scale_x, scaling_y=scale_y)
                             print("region from clicks", region)
                             try:
                                 self.app.default_region_page.regions.append(region)
                                 # a region has been added update xml
                                 # and write session to db
                                 self.app.session_to_db()
-                                # crop_rect = (
-                                #     int(x1 / scale_x),
-                                #     int(y1 / scale_y),
-                                #     int(w / scale_x),
-                                #     int(h / scale_y),
-                                # )
+                                crop_rect = (int(x1 / scale_x) , int(y1 / scale_y), int(w / scale_x), int(h / scale_y))
                                 self.selection_mode_selections = []
                                 self.script.script_input.text = ""
                                 if self.script.run_single_page_only:
                                     scripts = self.app.default_region_page.scripts
-                                    rule_scripts = self.app.default_region_page.rules_widget.ruleset.script(
-                                        keyling=True, newlines=False
-                                    )
+                                    rule_scripts =  self.app.default_region_page.rules_widget.ruleset.script(keyling=True, newlines=False)
                                 else:
                                     scripts = ""
                                     rule_scripts = ""
                                     for r in self.app.region_pages:
                                         scripts += r.scripts + "\n"
-                                        rule_scripts += r.rules_widget.ruleset.script(
-                                            keyling=True, newlines=False
-                                        )
+                                        rule_scripts += r.rules_widget.ruleset.script(keyling=True, newlines=False)
                                 if self.script.auto_run_scripts is True:
                                     self.script.run(scripts)
                                     self.script.run(rule_scripts)
@@ -633,11 +531,7 @@ class ClickableImage(Image):
                                 self.app.update_regions()
                             except Exception as ex:
                                 print(ex)
-                                anim = Animation(
-                                    background_color=[1, 0, 0, 1], duration=0.5
-                                ) + Animation(
-                                    background_color=[1, 1, 1, 1], duration=0.5
-                                )
+                                anim = Animation(background_color=[1,0,0,1], duration=0.5) + Animation(background_color=[1,1,1,1], duration=0.5)
                                 anim.start((self.app.region_page))
 
     def update_region_scripts(self):
@@ -647,18 +541,13 @@ class ClickableImage(Image):
         rule_scripts = ""
         if self.script.run_single_page_only:
             scripts = self.app.default_region_page.scripts
-            rule_scripts = self.app.default_region_page.rules_widget.ruleset.script(
-                keyling=True, newlines=False
-            )
+            rule_scripts =  self.app.default_region_page.rules_widget.ruleset.script(keyling=True, newlines=False)
         else:
             for r in self.app.region_pages:
                 scripts += r.scripts + "\n"
-                rule_scripts += r.rules_widget.ruleset.script(
-                    keyling=True, newlines=False
-                )
+                rule_scripts += r.rules_widget.ruleset.script(keyling=True, newlines=False)
         self.script.script_input.text += scripts + "\n"
         self.script.script_input.text += rule_scripts
-
 
 class ToggleButton(Button):
     def __init__(self, **kwargs):
@@ -680,7 +569,6 @@ class ToggleButton(Button):
         else:
             self.background_color = [.9, .9, .9, 1]
 
-
 class RuleWidgets(BoxLayout):
     def __init__(self, app=None, **kwargs):
         super(RuleWidgets, self).__init__(**kwargs)
@@ -693,11 +581,7 @@ class RuleWidgets(BoxLayout):
             row.add_widget(rule_toggle)
             setting_row = BoxLayout(orientation="horizontal")
             row.add_widget(setting_row)
-            rule_toggle.bind(
-                on_press=lambda widget, setting_row=setting_row: self.toggle_row(
-                    widget, setting_row
-                )
-            )
+            rule_toggle.bind(on_press=lambda widget, setting_row=setting_row: self.toggle_row(widget, setting_row))
             # store setting_row to allow updates from xml
             rule_toggle.setting_row = setting_row
             destination_widget = TextInput(multiline=False)
@@ -706,14 +590,12 @@ class RuleWidgets(BoxLayout):
             setting_row.add_widget(destination_widget)
             setting_row.add_widget(Label(text="becomes"))
             setting_row.add_widget(result_widget)
-            r = RuleWidget(
-                source_widget=self.app.region_page,
-                symbol_widget=Label(text="is"),
-                values_widget=rule_toggle,
-                destination_widget=destination_widget,
-                result_widget=result_widget,
-                enabled_widget=rule_toggle,
-            )
+            r = RuleWidget(source_widget = self.app.region_page,
+                           symbol_widget = Label(text="is"),
+                           values_widget = rule_toggle,
+                           destination_widget = destination_widget,
+                           result_widget = result_widget,
+                           enabled_widget = rule_toggle)
             self.ruleset.rules.append(r)
             types_container.add_widget(row)
             for child in setting_row.children:
@@ -733,6 +615,7 @@ class RuleWidgets(BoxLayout):
         if update_session:
             Clock.schedule_once(lambda dt: self.app.session_to_db(), .1)
 
+
     def as_xml(self):
         rules = []
         for rule in self.ruleset.rules:
@@ -745,7 +628,6 @@ class RuleWidgets(BoxLayout):
             rules.append(rule_xml)
         return rules
 
-
 class RuleBox(BoxLayout):
     def __init__(self, app=None, **kwargs):
         self.types_container = BoxLayout(orientation="vertical")
@@ -757,7 +639,6 @@ class RuleBox(BoxLayout):
         self.types_container.clear_widgets()
         self.types_container.add_widget(rules_widget)
 
-
 class ScriptBox(BoxLayout):
     def __init__(self, source_widget, **kwargs):
         self.orientation = "vertical"
@@ -765,63 +646,32 @@ class ScriptBox(BoxLayout):
         self.auto_run_scripts = True
         self.run_single_page_only = False
         self.sync_with_others = True
-        self.run_script_this_button = Button(
-            text="run script on this", size_hint_y=None, height=30
-        )
-        self.run_script_this_button.bind(
-            on_press=lambda widget: self.run_script(
-                self.script_input.text, widget=self.script_input
-            )
-        )
-        self.run_script_all_button = Button(
-            text="run script on all ( {} )".format(self.all_sources_key),
-            size_hint_y=None,
-            height=30,
-        )
+        self.run_script_this_button = Button(text="run script on this", size_hint_y=None, height=30)
+        self.run_script_this_button.bind(on_press=lambda widget: self.run_script(self.script_input.text, widget=self.script_input))
+        self.run_script_all_button = Button(text="run script on all ( {} )".format(self.all_sources_key), size_hint_y=None, height=30)
         self.run_script_all_button.bind(on_press=lambda widget: self.run_on_all())
-        self.script_regenerate_button = Button(
-            text="regenerate scripts", size_hint_y=None, height=30
-        )
-        self.script_regenerate_button.bind(
-            on_press=lambda widget: self.source_widget.update_region_scripts()
-        )
+        self.script_regenerate_button = Button(text="regenerate scripts", size_hint_y=None, height=30)
+        self.script_regenerate_button.bind(on_press=lambda widget: self.source_widget.update_region_scripts())
 
         self.source_widget = source_widget
         super(ScriptBox, self).__init__(**kwargs)
         auto_run_checkbox = CheckBox(size_hint_x=None)
         if self.auto_run_scripts:
             auto_run_checkbox.active = BooleanProperty(True)
-        auto_run_checkbox.bind(
-            active=lambda widget, value, self=self: setattr(
-                self, "auto_run_scripts", value
-            )
-        )
+        auto_run_checkbox.bind(active=lambda widget, value, self=self: setattr(self, "auto_run_scripts", value))
         auto_run_row = BoxLayout(orientation="horizontal", height=30, size_hint_y=None)
         auto_run_row.add_widget(auto_run_checkbox)
-        auto_run_row.add_widget(
-            Label(text="auto run generated scripts", size_hint_x=None)
-        )
+        auto_run_row.add_widget(Label(text="auto run generated scripts", size_hint_x=None))
         run_single_page_only_checkbox = CheckBox(size_hint_x=None)
         if self.run_single_page_only:
             run_single_page_only_checkbox.active = BooleanProperty(True)
-        run_single_page_only_checkbox.bind(
-            active=lambda widget, value, self=self: setattr(
-                self, "run_single_page_only", value
-            )
-        )
+        run_single_page_only_checkbox.bind(active=lambda widget, value, self=self: setattr(self, "run_single_page_only", value))
         auto_run_row.add_widget(run_single_page_only_checkbox)
-        auto_run_row.add_widget(
-            Label(text="run this page region only", size_hint_x=None)
-        )
+        auto_run_row.add_widget(Label(text="run this page region only", size_hint_x=None))
         sync_checkbox = CheckBox(size_hint_x=None)
         if self.sync_with_others:
             sync_checkbox.active = BooleanProperty(True)
-        sync_checkbox.bind(
-            active=lambda widget, value, self=self: [
-                setattr(self, "sync_with_others", value),
-                self.app.use_latest_session(),
-            ]
-        )
+        sync_checkbox.bind(active=lambda widget, value, self=self: [setattr(self, "sync_with_others", value), self.app.use_latest_session()])
         auto_run_row.add_widget(sync_checkbox)
         auto_run_row.add_widget(Label(text="sync with others", size_hint_x=None))
 
@@ -835,11 +685,9 @@ class ScriptBox(BoxLayout):
         sources = redis_conn.lrange(self.all_sources_key, 0, -1)
         for position, s in enumerate(sources):
             source = redis_conn.hgetall(s)
-            source.update({"META_DB_KEY": s})
+            source.update({"META_DB_KEY" : s})
             print("{} {}".format(position, s))
-            self.run_script(
-                self.script_input.text, widget=self.script_input, source=source
-            )
+            self.run_script(self.script_input.text, widget=self.script_input, source=source)
 
     @property
     def all_sources_key(self):
@@ -850,23 +698,20 @@ class ScriptBox(BoxLayout):
     def env_vars(self, source_uuid=None):
         db_port = redis_conn.connection_pool.connection_kwargs["port"]
         db_host = redis_conn.connection_pool.connection_kwargs["host"]
-        env_vars = {
-            "$DB_PORT": db_port,
-            "$DB_HOST": db_host,
-            "$KEY": self.source_widget.key_field,
-        }
+        env_vars = { "$DB_PORT" :  db_port,
+                     "$DB_HOST" : db_host,
+                     "$KEY" : self.source_widget.key_field
+                   }
         # try to get position from fold-ui
         # may not be up-to-date
         if source_uuid is not None:
             try:
-                source_position = redis_conn.lrange(self.all_sources_key, 0, -1).index(
-                    source_uuid
-                )
-                env_vars.update({"$SEQUENCE": source_position})
-            except Exception as ex:
+                source_position = redis_conn.lrange(self.all_sources_key, 0, -1).index(source_uuid)
+                env_vars.update({"$SEQUENCE" : source_position})
+            except:
                 pass
 
-        # env_vars.update(self.stored_env_vars)
+        #env_vars.update(self.stored_env_vars)
         return env_vars
 
     def run_script(self, script, widget=None, source=None):
@@ -876,39 +721,18 @@ class ScriptBox(BoxLayout):
             source_modified = None
             try:
                 model = keyling.model(script)
-                anim = Animation(
-                    background_color=[0, 1, 0, 1], duration=0.5
-                ) + Animation(background_color=current_background, duration=0.5)
+                anim = Animation(background_color=[0,1,0,1], duration=0.5) + Animation(background_color=current_background, duration=0.5)
                 anim.start(widget)
-            except Exception as ex:
-                anim = Animation(
-                    background_color=[1, 0, 0, 1], duration=0.5
-                ) + Animation(background_color=current_background, duration=0.5)
+            except:
+                anim = Animation(background_color=[1,0,0,1], duration=0.5) + Animation(background_color=current_background, duration=0.5)
                 anim.start(widget)
 
             if model:
                 if source is None:
-                    source_modified = keyling.parse_lines(
-                        model,
-                        self.source_widget.key_value,
-                        self.source_widget.key_value["META_DB_KEY"],
-                        allow_shell_calls=True,
-                        env_vars=self.env_vars(
-                            self.source_widget.key_value["META_DB_KEY"]
-                        ),
-                        source_updates=self.latest_source,
-                    )
+                    source_modified = keyling.parse_lines(model, self.source_widget.key_value, self.source_widget.key_value["META_DB_KEY"], allow_shell_calls=True, env_vars=self.env_vars(self.source_widget.key_value["META_DB_KEY"]), source_updates=self.latest_source)
                 else:
-                    source_modified = keyling.parse_lines(
-                        model,
-                        source,
-                        source["META_DB_KEY"],
-                        allow_shell_calls=True,
-                        env_vars=self.env_vars(source["META_DB_KEY"]),
-                        source_updates=self.latest_source,
-                    )
-                # do something with source_modified
-                print(source_modified)
+                    source_modified = keyling.parse_lines(model, source, source["META_DB_KEY"], allow_shell_calls=True, env_vars=self.env_vars(source["META_DB_KEY"]), source_updates=self.latest_source)
+                # self.view_source = source_modified
 
             widget.background_color = [1, 1, 1, 1]
 
@@ -920,22 +744,13 @@ class ScriptBox(BoxLayout):
             print(ex)
             pass
         if model:
-            source_modified = keyling.parse_lines(
-                model,
-                self.source_widget.key_value,
-                self.source_widget.key_value["META_DB_KEY"],
-                allow_shell_calls=True,
-                env_vars=self.env_vars(self.source_widget.key_value["META_DB_KEY"]),
-                source_updates=self.latest_source,
-            )
-            # do something with source_modified
-            print(source_modified)
+            source_modified = keyling.parse_lines(model, self.source_widget.key_value, self.source_widget.key_value["META_DB_KEY"], allow_shell_calls=True, env_vars=self.env_vars(self.source_widget.key_value["META_DB_KEY"]), source_updates=self.latest_source)
 
     def latest_source(self):
         return redis_conn.hgetall(self.source_widget.key_value["META_DB_KEY"])
 
-
 class DzzApp(App):
+
     def __init__(self, *args, **kwargs):
         # store kwargs to passthrough
         self.kwargs = kwargs
@@ -945,7 +760,7 @@ class DzzApp(App):
         if kwargs["db_host"] and kwargs["db_port"]:
             global binary_r
             global redis_conn
-            db_settings = {"host": kwargs["db_host"], "port": kwargs["db_port"]}
+            db_settings = {"host" :  kwargs["db_host"], "port" : kwargs["db_port"]}
             binary_r = redis.StrictRedis(**db_settings)
             redis_conn = redis.StrictRedis(**db_settings, decode_responses=True)
         self.db_port = redis_conn.connection_pool.connection_kwargs["port"]
@@ -968,7 +783,7 @@ class DzzApp(App):
         App.get_running_app().stop()
 
     def handle_db_events(self, message):
-        msg = message["channel"].replace("__keyspace@0__:", "")
+        msg = message["channel"].replace("__keyspace@0__:","")
         if msg in (self.img.key, self.img.key_reference):
             Clock.schedule_once(lambda dt: self.img.reload(), .1)
 
@@ -976,12 +791,7 @@ class DzzApp(App):
             self.fields.update_field_rows(self.img.key_value)
 
         if msg in (self.session_key):
-            Clock.schedule_once(
-                lambda dt, msg=msg: self.update_session(
-                    etree.fromstring(redis_conn.hget(msg, "xml"))
-                ),
-                .1,
-            )
+            Clock.schedule_once(lambda dt, msg=msg: self.update_session(etree.fromstring(redis_conn.hget(msg, "xml"))), .1)
 
     def update_session(self, xml):
         if self.img.script.sync_with_others:
@@ -989,43 +799,35 @@ class DzzApp(App):
 
     def update_from_xml(self, xml):
         print(etree.tostring(xml, pretty_print=True).decode())
-        for session in xml.xpath("//session"):
-            for regionpage_xml in session.xpath("./regionpage"):
+        for session in xml.xpath('//session'):
+            for regionpage_xml in session.xpath('./regionpage'):
                 # create/update regionpages
                 name = str(regionpage_xml.xpath("./@name")[0])
                 color = str(regionpage_xml.xpath("./@color")[0])
-                if name not in [region_page.name for region_page in self.region_pages]:
-                    regionpage = RegionPage(
-                        name=name,
-                        color=colour.Color(color),
-                        rules_widget=RuleWidgets(app=self),
-                    )
+                if not name in [region_page.name for region_page in self.region_pages]:
+                    regionpage = RegionPage(name=name, color=colour.Color(color), rules_widget=RuleWidgets(app=self))
                     self.region_pages.append(regionpage)
                     # insert name into dropdown
                     self.region_page.text = regionpage.name
-                    self.region_page.dispatch("on_text_validate")
+                    self.region_page.dispatch('on_text_validate')
 
                     if self.default_region_page is None:
                         self.default_region_page = regionpage
                         self.region_page.text = regionpage.name
                         # validate to enter in dropdown
-                        self.region_page.dispatch("on_text_validate")
+                        self.region_page.dispatch('on_text_validate')
                         self.update_regions()
                         self.rule_box.load_rules(self.default_region_page.rules_widget)
                     else:
                         # set dropdown name back to default
                         self.region_page.text = self.default_region_page.name
                 else:
-                    regionpage = [
-                        region_page
-                        for region_page in self.region_pages
-                        if region_page.name == name
-                    ][0]
+                    regionpage = [region_page for region_page in self.region_pages if region_page.name == name][0]
 
                 # create/update regions
                 # use to delete existing regions
                 created_regions = set()
-                for region_xml in regionpage_xml.xpath("./region"):
+                for region_xml in regionpage_xml.xpath('./region'):
                     r = {}
                     # use a copy of region attributes
                     r = dict(region_xml.attrib)
@@ -1037,25 +839,21 @@ class DzzApp(App):
                         except Exception as ex:
                             try:
                                 r[k] = float(v)
-                            except Exception as ex:
+                            except:
                                 pass
                             pass
 
                     r = Region(**r)
-                    print("region from xml: ", r)
+                    print("region from xml: ",r)
                     created_regions.add(r.name)
                     if r.name in [region.name for region in regionpage.regions]:
-                        to_remove = [
-                            region
-                            for region in regionpage.regions
-                            if region.name == r.name
-                        ][0]
+                        to_remove = [region for region in regionpage.regions if region.name == r.name][0]
                         regionpage.regions.remove(to_remove)
                         regionpage.regions.append(r)
                     else:
                         regionpage.regions.append(r)
 
-                for rule_xml in regionpage_xml.xpath("//rule"):
+                for rule_xml in regionpage_xml.xpath('//rule'):
                     # create/update rules
                     rule = dict(rule_xml.attrib)
                     for r in regionpage.rules_widget.ruleset.rules:
@@ -1073,11 +871,7 @@ class DzzApp(App):
                             # update to toggle enabled correctly...
                             r.enabled_widget.draw_pressed_state()
                             # set toggle_row state too
-                            regionpage.rules_widget.toggle_row(
-                                r.enabled_widget,
-                                r.enabled_widget.setting_row,
-                                update_session=False,
-                            )
+                            regionpage.rules_widget.toggle_row(r.enabled_widget, r.enabled_widget.setting_row, update_session=False)
 
                 # remove regions if needed
                 existing_regions = set([region.name for region in regionpage.regions])
@@ -1091,10 +885,10 @@ class DzzApp(App):
         # call draw_regions with a slight delay to
         # make sure canvas is loaded, otherwise rectangles
         # are drawn with incorrect coordinates
-        Clock.schedule_once(lambda dt: self.img.draw_regions(), 0.5)
+        Clock.schedule_once(lambda dt, : self.img.draw_regions(), 0.5)
 
     def set_region_page(self, widget):
-        if widget.text not in [region_page.name for region_page in self.region_pages]:
+        if not widget.text in [region_page.name for region_page in self.region_pages]:
             region = RegionPage(name=widget.text, rules_widget=RuleWidgets(app=self))
             self.region_pages.append(region)
             self.default_region_page = region
@@ -1109,28 +903,12 @@ class DzzApp(App):
         self.region_container.clear_widgets()
         for region in self.default_region_page.regions:
             row = BoxLayout(orientation="horizontal", height=30, size_hint_y=None)
-            row.add_widget(
-                Button(
-                    background_color=(*self.default_region_page.color.rgb, 1), text=" "
-                )
-            )
+            row.add_widget(Button(background_color=(*self.default_region_page.color.rgb,1), text=" "))
             change_region_name = TextInput(text=region.name, multiline=False)
-            change_region_name.bind(
-                on_text_validate=lambda widget, region=region: setattr(
-                    region, "name", widget.text
-                )
-            )
+            change_region_name.bind(on_text_validate=lambda widget, region=region: setattr(region, "name", widget.text))
             row.add_widget(change_region_name)
             remove_region = Button(text="remove")
-            remove_region.bind(
-                on_press=lambda widget, region=region, region_page=self.default_region_page: [
-                    region_page.regions.remove(region),
-                    self.update_regions(),
-                    self.img.draw_regions(),
-                    self.img.update_region_scripts(),
-                    self.session_to_db(),
-                ]
-            )
+            remove_region.bind(on_press=lambda widget, region=region, region_page=self.default_region_page: [region_page.regions.remove(region), self.update_regions(), self.img.draw_regions(), self.img.update_region_scripts(), self.session_to_db()])
             row.add_widget(remove_region)
             self.region_container.add_widget(row)
 
@@ -1143,13 +921,11 @@ class DzzApp(App):
     def session_to_db(self):
         session_string = etree.tostring(self.as_xml(), pretty_print=True).decode()
         if self.img.script.sync_with_others:
-            redis_conn.hmset(self.session_key, {"xml": session_string})
+            redis_conn.hmset(self.session_key, {"xml" : session_string})
 
     def use_latest_session(self):
         try:
-            self.update_session(
-                etree.fromstring(redis_conn.hget(self.session_key, "xml"))
-            )
+            self.update_session(etree.fromstring(redis_conn.hget(self.session_key, "xml")))
         except Exception as ex:
             print(ex)
 
@@ -1160,14 +936,9 @@ class DzzApp(App):
         root.add_widget(self.img)
         self.img.db_load(self.kwargs["db_key"], self.kwargs["db_key_field"])
         script_box = ScriptBox(source_widget=self.img, size_hint_y=.5)
-        # set app for access to rule_box
+        #set app for access to rule_box
         script_box.app = self
-        region_page = DropDownInput(
-            hint_text="enter a regionpage name",
-            height=60,
-            size_hint_y=None,
-            font_size="30sp",
-        )
+        region_page = DropDownInput(hint_text="enter a regionpage name", height=60, size_hint_y=None, font_size="30sp")
         region_page.bind(on_text_validate=lambda widget: self.set_region_page(widget))
         self.region_page = region_page
         self.region_container = BoxLayout(orientation="vertical", size_hint_y=None)
@@ -1181,7 +952,7 @@ class DzzApp(App):
         self.rule_box = RuleBox(app=self)
         upper_right_container.add_widget(self.rule_box)
         upper_left_container.add_widget(self.region_container)
-        # upper_left_container.add_widget(script_box)
+        #upper_left_container.add_widget(script_box)
         upper_container.add_widget(upper_left_container)
         upper_container.add_widget(upper_right_container)
         tool_container.add_widget(upper_container)
@@ -1191,17 +962,12 @@ class DzzApp(App):
         root.add_widget(tool_container)
 
         self.db_event_subscription = redis_conn.pubsub()
-        self.db_event_subscription.psubscribe(
-            **{"__keyspace@0__:*": self.handle_db_events}
-        )
+        self.db_event_subscription.psubscribe(**{'__keyspace@0__:*': self.handle_db_events})
         # add thread to pubsub object to stop() on exit
-        self.db_event_subscription.thread = self.db_event_subscription.run_in_thread(
-            sleep_time=0.001
-        )
+        self.db_event_subscription.thread = self.db_event_subscription.run_in_thread(sleep_time=0.001)
         # try to get existing/latest session
         self.use_latest_session()
         return root
-
 
 def load_image(uuid, new_size=None):
     contents = binary_r.get(uuid)
@@ -1219,16 +985,13 @@ def load_image(uuid, new_size=None):
         file = f
     return file
 
-
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--db-key", help="db hash key")
-    parser.add_argument("--db-key-field", help="db hash field")
+    parser.add_argument("--db-key",  help="db hash key")
+    parser.add_argument("--db-key-field",  help="db hash field")
 
-    parser.add_argument("--db-host", help="db host ip, requires use of --db-port")
-    parser.add_argument(
-        "--db-port", type=int, help="db port, requires use of --db-host"
-    )
+    parser.add_argument("--db-host",  help="db host ip, requires use of --db-port")
+    parser.add_argument("--db-port", type=int, help="db port, requires use of --db-host")
     args = parser.parse_args()
 
     if bool(args.db_host) != bool(args.db_port):
