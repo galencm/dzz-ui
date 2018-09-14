@@ -8,6 +8,8 @@ import argparse
 import atexit
 import io
 import textwrap
+import uuid
+import operator
 import redis
 from PIL import Image as PImage
 import attr
@@ -25,7 +27,7 @@ from kivy.uix.checkbox import CheckBox
 from kivy.uix.dropdown import DropDown
 from kivy.animation import Animation
 from kivy.graphics import Color, Line, Ellipse, InstructionGroup
-from kivy.graphics.vertex_instructions import Rectangle, Ellipse
+from kivy.graphics.vertex_instructions import VectorRectangle, VectorEllipse
 from kivy.uix.label import Label
 from kivy.properties import BooleanProperty
 
@@ -214,7 +216,7 @@ class DropDownInput(TextInput):
             btn = Button(text=args[0].text, size_hint_y=None, height=44)
             self.drop_down.add_widget(btn)
             btn.bind(on_release=lambda btn: self.drop_down.select(btn.text))
-            if not "preload" in args:
+            if "preload" not in args:
                 self.not_preloaded.add(btn)
 
     def on_select(self, *args):
@@ -225,7 +227,6 @@ class DropDownInput(TextInput):
             if hasattr(btn, "text")
         ]:
             self.drop_down.append(Button(text=args[1]))
-            self.not_preloaded.add(btn)
         # call on_text_validate after selection
         # to avoid having to select textinput and press enter
         self.dispatch("on_text_validate")
@@ -297,9 +298,9 @@ class EditViewViewer(BoxLayout):
         # it is added when source is retrieved and popped
         # before writing source
         self.fields_container = BoxLayout(orientation="vertical")
-        if not "META_DB_KEY" in view_source:
+        if "META_DB_KEY" not in view_source:
             view_source.update({"META_DB_KEY": str(uuid.uuid4())})
-        if not "META_DB_TTL" in view_source:
+        if "META_DB_TTL" not in view_source:
             view_source.update({"META_DB_TTL": str(-1)})
         self.update_field_rows()
         self.add_widget(self.fields_container)
@@ -316,7 +317,7 @@ class EditViewViewer(BoxLayout):
             pass
 
     def create_field(self, field, widget=None):
-        if not field in self.view_source:
+        if field not in self.view_source:
             self.view_source.update({field: ""})
             self.update_field_rows()
             if widget:
@@ -379,7 +380,7 @@ class EditViewViewer(BoxLayout):
                     widget.highlight.background_color = [0, 1, 0, 1]
                 else:
                     widget.highlight.background_color = [1, 1, 1, 1]
-            except:
+            except Exception as ex:
                 pass
 
     def update_field(self, field, value, widget=None):
@@ -398,7 +399,7 @@ class EditViewViewer(BoxLayout):
         # for now, still require enter to be pressed for META_
         # prefixed fields since it may disrupt values such as ttl
         for w in self.field_widgets:
-            if not "META_" in w.field_for:
+            if "META_" not in w.field_for:
                 self.update_field(w.field_for, w.text, w)
 
         key_to_write = self.view_source.pop("META_DB_KEY")
@@ -406,7 +407,7 @@ class EditViewViewer(BoxLayout):
         try:
             key_expiration = self.view_source.pop("META_DB_TTL")
             key_expiration = int(key_expiration)
-        except:
+        except Exception as ex:
             pass
 
         # remove any 'META_' prefixed keys before writing to db
@@ -481,7 +482,7 @@ class ClickableImage(Image):
             region_name = ""
         with self.canvas:
             Color(*color)
-            Rectangle(pos=(x, y), size=(w, h), group=region_name)
+            VectorRectangle(pos=(x, y), size=(w, h), group=region_name)
 
     def img_to_canvas_coords(self, region):
         offset_x = int((self.size[0] - self.norm_image_size[0]) / 2)
@@ -600,13 +601,13 @@ class ClickableImage(Image):
                                 # a region has been added update xml
                                 # and write session to db
                                 self.app.session_to_db()
-                                crop_rect = (
-                                    int(x1 / scale_x),
-                                    int(y1 / scale_y),
-                                    int(w / scale_x),
-                                    int(h / scale_y),
-                                )
-                                self.selection_mode_selections = []
+                                # crop_rect = (
+                                #     int(x1 / scale_x),
+                                #     int(y1 / scale_y),
+                                #     int(w / scale_x),
+                                #     int(h / scale_y),
+                                # )
+                                # self.selection_mode_selections = []
                                 self.script.script_input.text = ""
                                 if self.script.run_single_page_only:
                                     scripts = self.app.default_region_page.scripts
@@ -860,7 +861,7 @@ class ScriptBox(BoxLayout):
                     source_uuid
                 )
                 env_vars.update({"$SEQUENCE": source_position})
-            except:
+            except Exception as ex:
                 pass
 
         # env_vars.update(self.stored_env_vars)
@@ -877,7 +878,7 @@ class ScriptBox(BoxLayout):
                     background_color=[0, 1, 0, 1], duration=0.5
                 ) + Animation(background_color=current_background, duration=0.5)
                 anim.start(widget)
-            except:
+            except Exception as ex:
                 anim = Animation(
                     background_color=[1, 0, 0, 1], duration=0.5
                 ) + Animation(background_color=current_background, duration=0.5)
@@ -904,7 +905,7 @@ class ScriptBox(BoxLayout):
                         env_vars=self.env_vars(source["META_DB_KEY"]),
                         source_updates=self.latest_source,
                     )
-                # self.view_source = source_modified
+                print(source_modified)
 
             widget.background_color = [1, 1, 1, 1]
 
@@ -924,6 +925,7 @@ class ScriptBox(BoxLayout):
                 env_vars=self.env_vars(self.source_widget.key_value["META_DB_KEY"]),
                 source_updates=self.latest_source,
             )
+            print(source_modified)
 
     def latest_source(self):
         return redis_conn.hgetall(self.source_widget.key_value["META_DB_KEY"])
@@ -988,7 +990,7 @@ class DzzApp(App):
                 # create/update regionpages
                 name = str(regionpage_xml.xpath("./@name")[0])
                 color = str(regionpage_xml.xpath("./@color")[0])
-                if not name in [region_page.name for region_page in self.region_pages]:
+                if name not in [region_page.name for region_page in self.region_pages]:
                     regionpage = RegionPage(
                         name=name,
                         color=colour.Color(color),
@@ -1031,7 +1033,7 @@ class DzzApp(App):
                         except Exception as ex:
                             try:
                                 r[k] = float(v)
-                            except:
+                            except Exception as ex:
                                 pass
                             pass
 
@@ -1085,10 +1087,10 @@ class DzzApp(App):
         # call draw_regions with a slight delay to
         # make sure canvas is loaded, otherwise rectangles
         # are drawn with incorrect coordinates
-        Clock.schedule_once(lambda dt,: self.img.draw_regions(), 0.5)
+        Clock.schedule_once(lambda dt: self.img.draw_regions(), 0.5)
 
     def set_region_page(self, widget):
-        if not widget.text in [region_page.name for region_page in self.region_pages]:
+        if widget.text not in [region_page.name for region_page in self.region_pages]:
             region = RegionPage(name=widget.text, rules_widget=RuleWidgets(app=self))
             self.region_pages.append(region)
             self.default_region_page = region
